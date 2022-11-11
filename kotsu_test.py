@@ -14,6 +14,9 @@ import kotsu
 from sktime.forecasting.model_selection import ExpandingWindowSplitter
 from sktime.performance_metrics.forecasting import MeanSquaredPercentageError
 from sktime.forecasting.model_evaluation import evaluate
+import mlflow
+
+# LOAD DATASET
 
 dts_number = 0
 
@@ -36,11 +39,12 @@ index = pd.date_range(start_index,periods=y_test.shape[0],freq='D')
 y_test.index = index
 y_test= y_test.astype('float')
 
-
+# DEFINE MODEL
 
 regressor = RandomForestRegressor()
 forecaster = make_reduction(regressor, window_length=15, strategy="recursive")
 
+fh = ForecastingHorizon(np.arange(1,len(y_test)+1))
 
 
 # Directional change reduced to forecasting
@@ -65,144 +69,42 @@ def converter(y1,y2):
     dc = dc.astype('int')
     return dc
 
-forecaster_pipe = NetworkPipelineForecaster([
+steps = ([
     ('forecaster',forecaster, {'fit':{'y': 'original_y', 'fh':'original_fh'},
                                 'predict':{'fh':'original_fh'}
     }),
     ('converter', converter, {'fit':None,
                              'predict':{'y1':y_train,'y2':'forecaster'}})
 ])
-fh = ForecastingHorizon(np.arange(1,len(y_test)+1))
-forecaster_pipe.fit(y=y_train, fh=fh)
-out = forecaster_pipe.predict()
-print(out)
 
-
-#Directional change reduced to supervised classifcation
-
-def time_series_to_tabular(y,window_length, fh, return_value):
-    """
-    Converts a pd.Series to tabular format. Lables target variable 1 for up 0 for down
-    
-    Parameters
-    ----------
-    y : pd.Series
-        input time series
-    window_length : int
-        number of features for each raw of X
-    fh : ForecastingHorizon
-        ForecastingHorizon object
-    stage : str 
-        must be `fit` or `predict`
-    return_value : string
-        acceptable values `X` and `y` only
-    
-    Returns
-    -------
-        tuple of (numpy.ndarray, numpy.ndarray) where the first element are the target (y) variable and the second element are the features (X)
-    """
-    fh=fh
-    y_tmp,x_dc = _sliding_window_transform(y_train,window_length=window_length,fh=fh)
-    y_dc = np.zeros(len(y_tmp))
-    y_tmp = y_tmp.reshape(x_dc[:,-1].shape)
-    y_mask = (x_dc[:,-1] > y_tmp) #up observations
-    y_dc[y_mask]=1
-    if return_value == 'X':
-        return x_dc
-    if return_value == 'y':
-        return y_dc
-    
-def concatenator(y_train, y_test, window_length):
-    return pd.concat([y_train[-window_length-1:-1],y_test])
-
-window_length = 5
-classifier_pipe = NetworkPipelineForecaster([
-    ('concatenator',concatenator, {'fit':None, 
-                                    'predict':{'y_train': y_train, 'y_test': y_test, 'window_length':window_length}}),
-    ('time_series_to_tabular_x', time_series_to_tabular,{
-            'fit':{'y':'original_y', 'window_length':window_length, 'fh': 'original_fh', 'return_value':'X'},
-            'predict': {'y':'concatenator', 'window_length':window_length, 'fh': 'original_fh', 'return_value':'X'} }),
-    ('time_series_to_tabular_y', time_series_to_tabular,{
-            'fit':{'y':'original_y', 'window_length':window_length, 'fh': 'original_fh', 'return_value':'y'},
-            'predict': None }),
-    ('classifier', RandomForestClassifier(), {'fit':{'X': 'time_series_to_tabular_x', 'y': 'time_series_to_tabular_y' },
-                                              'predict': {'X': 'time_series_to_tabular_x'} })
-])
-
-fh=ForecastingHorizon([1])
-classifier_pipe.fit(y_train, fh=fh)
-out = classifier_pipe.predict()
-print(f'classifier{out}')
-
-
-#Reduce directional change to forecasting with exogenous variables
-fh = ForecastingHorizon(np.arange(1,len(y_test)+1))
-
-def reshape(y):
-    return y.values.reshape(-1,1)
-hmm_model = hmm.GaussianHMM(n_components=3, covariance_type="diag", n_iter=1000)
-
-def decoder(est,y):
-    X = est.decode(y.values.reshape(-1,1))[1]
-    X = pd.Series(X)
-    X.index = y.index
-    return X
-
-
-exogenous_pipe = NetworkPipelineForecaster([
-    ('reshape', reshape,  {'fit':{'y':'original_y'},
-                            'predict': {'y':y_test} }),
-    ('hmm',hmm_model, {'X':'reshape'}),
-    ('fitted_hmm', 'get_fitted_estimator', {'fit': None, 'predict':{'step_name':'hmm'}}), #discuss this interface for getting fitted models
-    ('decoder',decoder, {'fit':{'est':'hmm', 'y':'original_y'},
-                         'predict':{'est':'fitted_hmm', 'y':y_test}   }),
-    ('regressor', make_reduction(RandomForestRegressor(), window_length=5, strategy='recursive'), 
-                                                                        {'fit':{'y': 'original_y', 'X': 'decoder', 'fh':'original_fh'},
-                                                                         'predict':{'X': 'decoder'} } ),
-     ('converter', converter, {'fit':None,
-                             'predict':{'y1':y_train,'y2':'regressor'}})
-])
-
-# exogenous_pipe.fit(y_train, fh=fh)
-
-# out = exogenous_pipe.predict()
-
-# print(out)
-
-############# Kotsu
+# BENCHMARK WITH MLFLOW
 
 model_registry_m4benchmarking = kotsu.registration.ModelRegistry()
 
 model_registry_m4benchmarking.register(
     id="BenchmarkingPipe-v1",
-    entry_point=forecaster_pipe,
+    entry_point=NetworkPipelineForecaster,
+    kwargs={'steps':steps}
 )
 
 validation_registry_m4benchmarking = kotsu.registration.ValidationRegistry()
 
 
-def factory_airline_cross_validation():
+def factory():
     """Factory for airline cross validation."""
 
     def airline_cross_validation(model):
         """Airline dataset cross validation."""
-       
-        cv = ExpandingWindowSplitter(
-            initial_window=24,
-            step_length=12,
-            fh=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-        )
-        scores = evaluate(
-            forecaster=model, y=y_train, cv=cv, scoring=MeanSquaredPercentageError()
-        )
-        return scores
+        error = MeanSquaredPercentageError()
+        error(y_pred=y_test,y_true=y_test)
+        return error
 
     return airline_cross_validation
 
 
 validation_registry_m4benchmarking.register(
     id="first_dataset-v1",
-    entry_point=factory_airline_cross_validation,
+    entry_point=factory,
 )
 
 kotsu.run.run(
