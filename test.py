@@ -11,25 +11,26 @@ from sktime.forecasting.compose._reduce import _sliding_window_transform
 from sklearn.ensemble import RandomForestClassifier
 from hmmlearn import hmm
 
-# daily_train = pd.read_csv('../Dataset/Train/Daily-train.csv')
-# daily_test = pd.read_csv('../Dataset/Test/Daily-test.csv')
-# info = pd.read_csv('../Dataset/M4-info.csv')
-# y_train = daily_train.iloc[0,:][1:].dropna()
-# series_name = daily_train.iloc[0,:][0]
-# start_index = info[info['M4id']==series_name]
-# index = pd.date_range(start_index['StartingDate'].iloc[0],periods=len(y_train),freq='D')
-# y_train.index = index
-# y_train= y_train.astype('float')
+daily_train = pd.read_csv('Dataset/Train/Daily-train.csv')
+daily_test = pd.read_csv('Dataset/Test/Daily-test.csv')
+info = pd.read_csv('Dataset/M4-info.csv')
+y_train = daily_train.iloc[0,:][1:].dropna()
+series_name = daily_train.iloc[0,:][0]
+start_index = info[info['M4id']==series_name]
+index = pd.date_range(start_index['StartingDate'].iloc[0],periods=len(y_train),freq='D')
+y_train.index = index
+y_train= y_train.astype('float')
 
-# y_test = daily_test.iloc[0,:][1:].dropna()
-# start_index = y_train.index[-1]  + pd.DateOffset(1)
-# index = pd.date_range(start_index,periods=len(y_test),freq='D')
-# y_test.index = index
-# y_test= y_test.astype('float')
+y_test = daily_test.iloc[0,:][1:].dropna()
+start_index = y_train.index[-1]  + pd.DateOffset(1)
+index = pd.date_range(start_index,periods=len(y_test),freq='D')
+y_test.index = index
+y_test= y_test.astype('float')
 
-y = load_shampoo_sales()
-y_train = y[0:20]
-y_test = y[21:-1]
+# y = load_shampoo_sales()
+# y_train = y[0:20]
+# y_test = y[21:-1]
+
 regressor = RandomForestRegressor()
 forecaster = make_reduction(regressor, window_length=15, strategy="recursive")
 

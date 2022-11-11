@@ -1,7 +1,8 @@
 from unicodedata import name
 from sktime.forecasting.compose._reduce import _sliding_window_transform
 from sklearn.ensemble import RandomForestClassifier
-from sktime.classification.base import BaseClassifier
+from sktime.forecasting.compose._reduce import _sliding_window_transform
+from sktime.classification.base import BaseClassifier, BaseEstimator
 import numpy as np
 import pandas as pd
 from sktime.forecasting.base import ForecastingHorizon
@@ -10,7 +11,7 @@ from sktime.forecasting.base import ForecastingHorizon
 
 
 
-class DirectionalChangeClassifier(BaseClassifier):
+class DirectionalChangeClassifier(BaseEstimator):
     """Custom forecaster. todo: write docstring.
     todo: describe your custom forecaster here
     Parameters
@@ -47,8 +48,8 @@ class DirectionalChangeClassifier(BaseClassifier):
     # todo: add any hyper-parameters and components to constructor
     def __init__(self, classifier, name, window_length=100):
         self.name=name
-        self.classifier = classifier
-        self.window_length = window_length
+        self.classifier = cls
+        self._window_length= window_length
         # todo: change "MyForecaster" to the name of the class
         super(DirectionalChangeClassifier, self).__init__()
 
@@ -83,7 +84,7 @@ class DirectionalChangeClassifier(BaseClassifier):
         self : reference to self
         """
         fh=ForecastingHorizon([1])
-        y_tmp,x_dc = _sliding_window_transform(y,window_length=self.window_length,fh=fh)
+        y_tmp,x_dc = _sliding_window_transform(y,window_length=self._window_length,fh=fh)
         y_dc = np.zeros(len(y_tmp))
         y_tmp = y_tmp.reshape(x_dc[:,-1].shape)
         y_mask = (x_dc[:,-1] > y_tmp) #up observations
@@ -131,7 +132,7 @@ class DirectionalChangeClassifier(BaseClassifier):
         fh=ForecastingHorizon([1])
 
         y_test_concat = pd.concat([self.y[-self._ini-1:-1],X])
-        y_tmp_test,x_dc_test = _sliding_window_transform(y_test_concat,window_length=self.window_length,fh=fh)
+        y_tmp_test,x_dc_test = _sliding_window_transform(y_test_concat,window_length=self._window_length,fh=fh)
         y_dc_test = np.zeros(len(y_tmp_test))
         y_tmp_test = y_tmp_test.reshape(x_dc_test[:,-1].shape)
         y_mask = (x_dc_test[:,-1] > y_tmp_test) #up observations
@@ -208,4 +209,4 @@ class DirectionalChangeClassifier(BaseClassifier):
 
 
 cls = RandomForestClassifier(n_jobs=12)
-dc_rf = DirectionalChangeClassifier(classifier=RandomForestClassifier(n_jobs=12), name='RandomForestClassifier')
+dc_rf = DirectionalChangeClassifier(classifier=RandomForestClassifier(n_jobs=12), name='RandomForestClassifier', window_length=100)
