@@ -56,7 +56,7 @@ class LoadM4Dataset:
         num_lines = 0
         for line in reader:
             num_lines+=1
-        return num_lines -1
+        return num_lines -2
 
     def load_dts_sequentially(self):
         i=0

@@ -7,7 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 import numpy as np
 from sktime.forecasting.base import ForecastingHorizon
 from hmmlearn import hmm
-
+from utils import converter
 from abc import ABC, abstractmethod
 
 class BasePipe(ABC):
@@ -40,26 +40,7 @@ class RegressorPipe(BasePipe):
     def build(self, **kwargs):
         regressor = RandomForestRegressor()
         forecaster = make_reduction(regressor, window_length=15, strategy="recursive")
-        def converter(y1,y2):
-            """
-            Converts regression output to directional change output where 1 means up 0 means down
-            Parameters
-            ----------
-            y1 : pd.Series
-                Series preceeding y2. It is used only to calculate the value of the first item in y2 (up down relative to the last value of y1)
-            y2 : pd.Series
-            
-            Returns
-            -------
-                pd.Series
-            """
-            concat_y1_y2 = pd.concat([y1[-2:-1],y2])
-            dc = concat_y1_y2.shift(-1) > concat_y1_y2
-            dc = dc[0:-1]
-            dc[dc==True] =1
-            dc[dc==False] =0
-            dc = dc.astype('int')
-            return dc
+
 
         forecaster_pipe = NetworkPipelineForecaster([
             ('forecaster',forecaster, {'fit':{'y': 'original_y', 'fh':'original_fh'},
@@ -68,8 +49,8 @@ class RegressorPipe(BasePipe):
             ('converter', converter, {'fit':None,
                                     'predict':{'y1':kwargs['y_train'],'y2':'forecaster'}})
         ])
-        self.model = forecaster
-        return forecaster
+        self.model = forecaster_pipe
+        return forecaster_pipe
 
 
 # with mlflow.start_run():
@@ -162,27 +143,6 @@ class ExogenousPipe(BasePipe):
     def reshape(self,y):
         return y.values.reshape(-1,1)
     
-    def converter(y1,y2):
-        """
-        Converts regression output to directional change output where 1 means up 0 means down
-        Parameters
-        ----------
-        y1 : pd.Series
-            Series preceeding y2. It is used only to calculate the value of the first item in y2 (up down relative to the last value of y1)
-        y2 : pd.Series
-        
-        Returns
-        -------
-            pd.Series
-        """
-        concat_y1_y2 = pd.concat([y1[-2:-1],y2])
-        dc = concat_y1_y2.shift(-1) > concat_y1_y2
-        dc = dc[0:-1]
-        dc[dc==True] =1
-        dc[dc==False] =0
-        dc = dc.astype('int')
-        return dc
-
 
     def decoder(self,est,y):
         X = est.decode(y.values.reshape(-1,1))[1]
@@ -202,13 +162,13 @@ class ExogenousPipe(BasePipe):
             ('regressor', make_reduction(RandomForestRegressor(), window_length=5, strategy='recursive'), 
                                                                                 {'fit':{'y': 'original_y', 'X': 'decoder', 'fh':'original_fh'},
                                                                                 'predict':{'X': 'decoder'} } ),
-            ('converter', self.converter, {'fit':None,
+            ('converter', converter, {'fit':None,
                                     'predict':{'y1':kwargs['y_train'],'y2':'regressor'}})
         ])
         self.model = exogenous_pipe
         return exogenous_pipe
     def get_fh(self, **kwargs):
-        return ForecastingHorizon([1])
+        return ForecastingHorizon(np.arange(1,len(kwargs['y_test'])+1))
 # exogenous_pipe.fit(y_train, fh=fh)
 
 # out = exogenous_pipe.predict()
