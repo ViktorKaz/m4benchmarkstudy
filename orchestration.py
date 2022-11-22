@@ -1,15 +1,32 @@
 from load_dataset import LoadM4Dataset
 from model_registry import ModelRegistry
-from models import RegressorPipe, SupervisedClassificationPipe, ExogenousPipe
+from models import (lasso_regression, 
+                    random_forest_regressor_pipeline,
+                    svm_regressor_pipeline,
+                    k_neighbours_regressor,
+                    logistic_regression,
+                    rf_classifier,
+                    svm_classifier,
+                    k_neighbours_classifier,
+                    rf_hmm_exogenous,
+                    rf_cusum_exogenous)
 from evaluation_registry import DCEvaluator
 import mlflow 
 
-regressor_pipe = RegressorPipe(model_name='regressor_pipeline')
-classifcation_pipe = SupervisedClassificationPipe(model_name='supervised_classification_pipeline')
-exogenous_pipe = ExogenousPipe(model_name='exogenous_pipeline')
+
 data = LoadM4Dataset(main_dir_path="Dataset", dts_frequency='Daily')
 # models = ModelRegistry([regressor_pipe, classifcation_pipe,expgenous_pipe])
-models = ModelRegistry([exogenous_pipe, classifcation_pipe, regressor_pipe])
+models = ModelRegistry([#rf_cusum_exogenous,
+                        #rf_hmm_exogenous,
+                        lasso_regression, 
+                        random_forest_regressor_pipeline,
+                        svm_regressor_pipeline,
+                        k_neighbours_regressor,
+                        logistic_regression,
+                        rf_classifier,
+                        svm_classifier,
+                        k_neighbours_classifier
+                        ])
 
 
 data_gen = data.load_dts_sequentially()
@@ -25,8 +42,8 @@ class Orchestrator:
         self.data_gen = data_gen
         self.evaluator = evaluator
     def run(self):
+        total_number_datasets = data.get_num_lines_in_dts()
         for model in self.models_gen:
-            total_number_datasets = data.get_num_lines_in_dts()
             current_dts = 0
             for dts in data.load_dts_sequentially():
             # for i in range(1,total_number_datasets):
@@ -37,9 +54,12 @@ class Orchestrator:
                     built_model = model.build(y_train=y_train, y_test=y_test)
                     print(f'****Fitting {model.get_model_name()} on dataset {current_dts}/{total_number_datasets}, {current_dts/total_number_datasets}% completed*****')
                     fh = model.get_fh(y_test=y_test)
-                    built_model.fit(y=y_train, fh=fh)
-                    predictions = built_model.predict()
-                    
+                    try:
+                        built_model.fit(y=y_train, fh=fh)
+                        predictions = built_model.predict()
+                    except ValueError:
+                        print(f'###########!!!!!!!###########Error:{ValueError}')
+                        continue
                     #evaluate
                     accuracy, f1,fpr, tpr, area_under_the_curve = self.evaluator.evaluate(y_train, y_test, predictions)
                     mlflow.log_metric('accuracy', accuracy)
