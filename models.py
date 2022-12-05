@@ -13,6 +13,8 @@ from utils import converter
 from abc import ABC, abstractmethod
 from sktime.classification.base import BaseClassifier
 from sktime.base import BaseEstimator
+from sktime.forecasting.model_selection import SlidingWindowSplitter
+
 class BasePipe(ABC):
 
     def get_model_name(self):
@@ -179,18 +181,47 @@ class HHMExogenousPipeRegressor(BasePipe):
         X = pd.Series(X)
         X.index = y.index
         return X
+    def exogenous(self, method, y_train, y_test=None):
+        """
+        Simulates sequential arrival of the y_test data.
+        Exogenous model makes 1 steap ahead predictions.
+        Used to avoid leakage of the test data
+
+        Parameters
+        ----------
+        method : str (fit or predict)
+        y_train : pd.Series
+        y_test : pd.Series
+
+        Retrurns
+        --------
+            list
+        """
+        if method == 'predict':
+            comb_y = pd.concat([y_train, y_test])
+            predictions = []
+            splitter = SlidingWindowSplitter(fh=[1], window_length=y_train.shape[0])
+            for split in splitter.split(comb_y):
+                y = comb_y.iloc[split[0]].values.reshape(-1,1)
+                self.exogenous_model.fit(y)
+                predictions.append(self.exogenous_model.decode(y)[1][-1])
+        
+            return pd.Series(index=y_test.index,data=predictions)
+        if method == 'fit':
+            y = y_train.values.reshape(-1,1)
+            self.exogenous_model.fit(y)
+            decoded_y = self.exogenous_model.decode(y)[1]
+
+            return pd.Series(index=y_train.index, data=decoded_y)
+
 
     def build(self, **kwargs):
         exogenous_pipe = NetworkPipelineForecaster([
-            ('reshape', self.reshape,  {'fit':{'y':'original_y'},
-                                    'predict': {'y':kwargs['y_test']} }),
-            ('exogenous_model',self.exogenous_model, {'X':'reshape'}),
-            ('fitted_exogenous_model', 'get_fitted_estimator', {'fit': None, 'predict':{'step_name':'exogenous_model'}}), #discuss this interface for getting fitted models
-            ('decoder',self.decoder, {'fit':{'est':'exogenous_model', 'y':'original_y'},
-                                'predict':{'est':'fitted_exogenous_model', 'y':kwargs['y_test']}   }),
+            ('exogenous_model', self.exogenous, {'fit': {'method':'fit', 'y_train':'original_y'},
+                                                      'predict':{'method':'predict', 'y_train':kwargs['y_train'], 'y_test':kwargs['y_test']}}),
             ('regressor', make_reduction(self.regressor_model, window_length=5, strategy='recursive'), 
-                                                                                {'fit':{'y': 'original_y', 'X': 'decoder', 'fh':'original_fh'},
-                                                                                'predict':{'X': 'decoder'} } ),
+                                                                                {'fit':{'y': 'original_y', 'X': 'exogenous_model', 'fh':'original_fh'},
+                                                                                'predict':{'X': 'exogenous_model'} } ),
             ('converter', converter, {'fit':None,
                                     'predict':{'y1':kwargs['y_train'],'y2':'regressor'}})
         ])
@@ -265,18 +296,30 @@ class CUSUMExogenousPipeRegressor(BasePipe):
     
     def decoder(self, est, y):
         return est._generate_predictions(y)
+    def exogenous(self, method, y_train, y_test=None):
+
+        if method == 'fit':
+            self.exogenous_model._find_threshold(y_train)
+            return self.exogenous_model._generate_predictions(y_train)
+        if method == 'predict':
+            comb_y = pd.concat([y_train, y_test])
+            predictions = []
+            splitter = SlidingWindowSplitter(fh=[1], window_length=y_train.shape[0])
+            for split in splitter.split(comb_y):
+                y = comb_y.iloc[split[0]]
+                
+                predictions.append(self.exogenous_model.predict(y)[-1])
+        
+            return pd.Series(index=y_test.index,data=predictions)
 
     def build(self, **kwargs):
         exogenous_pipe = NetworkPipelineForecaster([
-            ('exogenous_model',self.exogenous_model, {'fit':{'X':'original_y'},
-                                    'predict': None }),
-            ('fitted_exogenous_model', 'get_fitted_estimator', {'fit': None, 'predict':{'step_name':'exogenous_model'}}),
-            ('exogenous_model_decoder', self.decoder, {'fit': {'est': 'exogenous_model', 'y': 'original_y' }, 
-                                                       'predict':{'est': 'fitted_exogenous_model', 'y': kwargs['y_test'] }}),
 
+            ('exogenous_model', self.exogenous, {'fit': {'method':'fit', 'y_train':'original_y'},
+                                                      'predict':{'method':'predict', 'y_train':kwargs['y_train'], 'y_test':kwargs['y_test']}}),
             ('regressor', make_reduction(self.regressor_model, window_length=5, strategy='recursive'), 
-                                                                                {'fit':{'y': 'original_y', 'X': 'exogenous_model_decoder', 'fh':'original_fh'},
-                                                                                'predict':{'X': 'exogenous_model_decoder'} } ),
+                                                                                {'fit':{'y': 'original_y', 'X': 'exogenous_model', 'fh':'original_fh'},
+                                                                                'predict':{'X': 'exogenous_model'} } ),
             ('converter', converter, {'fit':None,
                                     'predict':{'y1':kwargs['y_train'],'y2':'regressor'}})
         ])

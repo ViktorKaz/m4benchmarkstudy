@@ -16,8 +16,8 @@ import mlflow
 
 data = LoadM4Dataset(main_dir_path="Dataset", dts_frequency='Daily')
 # models = ModelRegistry([regressor_pipe, classifcation_pipe,expgenous_pipe])
-models = ModelRegistry([#rf_cusum_exogenous,
-                        #rf_hmm_exogenous,
+models = ModelRegistry([rf_cusum_exogenous,
+                        rf_hmm_exogenous,
                         lasso_regression, 
                         random_forest_regressor_pipeline,
                         svm_regressor_pipeline,
