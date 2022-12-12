@@ -239,7 +239,7 @@ from mlfinlab.filters import cusum_filter
 
 
 class CusumFilter:
-    def __init__(self, filter=cusum_filter, search_range = np.arange(10,0.001, step=-0.01), pct_positive_annotations=0.1, threshold=None):
+    def __init__(self, filter=cusum_filter, search_range = np.arange(5,0.01, step=-0.01), pct_positive_annotations=0.1, threshold=None):
         self.filter = filter
         self.search_range = search_range
         self.pct_positive_annotations = pct_positive_annotations
