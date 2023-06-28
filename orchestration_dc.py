@@ -45,7 +45,7 @@ class Orchestrator:
                             print(f'#### {tag} present in database. SKIPPING ####')
                             continue
 
-                        
+                    model.generate_dc(y_train, y_test)    
                         
                     # built_model = model.build(y_train=y_train, y_test=y_test)
                     # print(f'****Fitting {model.get_model_name()} on dataset {dts_id}')
@@ -65,10 +65,10 @@ class Orchestrator:
                 except ValueError as err:
                     print(f'###########!!!!!!!###########Error fitting: {tag}')
                     print(err)
-                    with mlflow.start_run(run_id=run_id):
-                        mlflow.set_tag("mlflow.runName", tag )
-                        mlflow.log_param('run_error', True)
-                        mlflow.end_run()
+                    # with mlflow.start_run(run_id=run_id):
+                    #     mlflow.set_tag("mlflow.runName", tag )
+                    #     mlflow.log_param('run_error', True)
+                    #     mlflow.end_run()
                     
 if __name__ == "__main__":
     orchestrator  = Orchestrator(models=models,data_gen=data_gen, evaluator=evaluator)

@@ -332,3 +332,75 @@ class CUSUMExogenousPipeRegressor(BasePipe):
 rf_cusum_exogenous = CUSUMExogenousPipeRegressor(model_name='RF_CUSUM_exogenous', regressor_model=RandomForestRegressor(),
                                           exogenous_model=CusumFilter(),
                                         window_length=15)
+
+
+########################################### DC PIPELINES  ##########################################
+
+
+class DCPipeRegressor():
+    """
+    Parameters
+    ----------
+    model_name : str
+        name of model
+    regressor_model : object
+        primary model
+    dc_model : object
+        secondary model
+    """
+    def __init__(self, model_name, regressor_model, dc_model, window_length):
+        self.model_name = model_name
+        self.dc_model = dc_model
+        self.regressor_model = regressor_model
+        self.window_length = window_length
+    def reshape(self,y):
+        return y.values.reshape(-1,1)
+    
+    def _concatenate_train_test_sets(self, y_train, y_test):
+        return pd.concat([y_train, y_test], ignore_index=False)
+    
+    def generate_dc(self, y_train, y_test):
+        y = self._concatenate_train_test_sets(y_train=y_train, y_test=y_test)
+        self.dc_model._find_threshold(y)
+        dc_events = self.dc_model._generate_predictions(y)
+        print (dc_events)
+
+    def get_model_name(self):
+        return self.model_name
+    def decoder(self, est, y):
+        return est._generate_predictions(y)
+    def dc(self, method, y_train, y_test=None):
+
+        if method == 'fit':
+            self.dc_model._find_threshold(y_train)
+            return self.dc_model._generate_predictions(y_train)
+        if method == 'predict':
+            comb_y = pd.concat([y_train, y_test])
+            predictions = []
+            splitter = SlidingWindowSplitter(fh=[1], window_length=y_train.shape[0])
+            for split in splitter.split(comb_y):
+                y = comb_y.iloc[split[0]]
+                
+                predictions.append(self.dc_model.predict(y)[-1])
+        
+            return pd.Series(index=y_test.index,data=predictions)
+
+    def build(self, **kwargs):
+        dc_pipe = NetworkPipelineForecaster([
+
+            ('dc_model', self.dc, {'fit': {'method':'fit', 'y_train':'original_y'},
+                                                      'predict':{'method':'predict', 'y_train':kwargs['y_train'], 'y_test':kwargs['y_test']}}),
+            ('regressor', make_reduction(self.regressor_model, window_length=5, strategy='recursive'), 
+                                                                                {'fit':{'y': 'original_y', 'X': 'dc_model', 'fh':'original_fh'},
+                                                                                'predict':{'X': 'dc_model'} } ),
+            ('converter', converter, {'fit':None,
+                                    'predict':{'y1':kwargs['y_train'],'y2':'regressor'}})
+        ])
+        self.model = dc_pipe
+        return dc_pipe
+    def get_fh(self, **kwargs):
+        return ForecastingHorizon(np.arange(1,len(kwargs['y_test'])+1))
+    
+rf_cusum_dc = DCPipeRegressor(model_name='RF_CUSUM_dc', regressor_model=RandomForestRegressor(),
+                                          dc_model=CusumFilter(),
+                                        window_length=15)
