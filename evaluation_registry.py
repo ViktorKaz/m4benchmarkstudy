@@ -5,11 +5,12 @@ class DCEvaluator:
     
 
     def evaluate(self, y_train, y_test, y_pred):
-        y_true = converter(y_train, y_test)
+        y_true_dc = converter(y_train, y_test)
+        y_pred_dc = converter(y_train, y_pred)
 
-        accuracy = accuracy_score(y_true, y_pred)
-        f1 = f1_score(y_true, y_pred)
-        fpr, tpr, thresholds = roc_curve(y_true, y_pred, pos_label=1)
+        accuracy = accuracy_score(y_true_dc, y_pred_dc)
+        f1 = f1_score(y_true_dc, y_pred_dc)
+        fpr, tpr, thresholds = roc_curve(y_true_dc, y_pred_dc, pos_label=1)
         area_under_the_curve  = auc(fpr,tpr)
 
         return accuracy, f1,fpr, tpr, area_under_the_curve
