@@ -13,7 +13,8 @@ class DirectionalForecast():
         self.y_train = y_train
         self.y_test = y_test
         self.X = None #for exogenous models
-
+    def get_name(self):
+        return self.name
     def fit_predict(self):
         """Returns predictions in pd.Series of float        
         """
@@ -47,6 +48,13 @@ class DirectionalForecast():
         # pred_dc = self.convert_to_dc(y1=self.y_train, y2=self.y_pred)
         if self.X is None:
             accuracy, f1,fpr, tpr, area_under_the_curve = evaluator.evaluate(self.y_train, self.y_test, self.y_pred, tag=self.tag)
+
+            self._accuracy = accuracy
+            self._f1 = f1
+            self._fpr = fpr[1]
+            self._tpr = tpr[1]
+            self._auc = area_under_the_curve
+
             return accuracy, f1,fpr, tpr, area_under_the_curve
         else:
             X_idx_test = self.X.loc[self.y_test.iloc[0:-1].index].index
@@ -74,12 +82,28 @@ class DirectionalForecast():
             max_accuracy = max(all_accuracy)
             idx_max_accuracy = all_accuracy.index(max_accuracy)
             
+            self._accuracy = all_accuracy[idx_max_accuracy]
+            self._f1 = all_f1[idx_max_accuracy]
+            self._fpr = all_fpr[idx_max_accuracy][1]
+            self._tpr = all_tpr[idx_max_accuracy][1]
+            self._auc = all_area_under_the_curve[idx_max_accuracy]
+
             return all_accuracy[idx_max_accuracy], \
                     all_f1[idx_max_accuracy], \
                     all_fpr[idx_max_accuracy], \
                     all_tpr[idx_max_accuracy], \
                     all_area_under_the_curve[idx_max_accuracy]
         
+    def save_results(self):
+        try:
+            existing_data = pd.from_csv('results.csv')
+        except:
+            existing_data = pd.DataFrame(columns=['estimator','accuracy','f1','fpr','tpr','auc'])
+        data = [self._accuracy, self._f1, self._tpr, self._fpr, self._auc]
+        new_data = pd.DataFrame(columns=['estimator','accuracy','f1','fpr','tpr','auc'], data=data)
+        concatednated_results = pd.concat([existing_data, new_data])
+        concatednated_results.to_csv('results.csv')
+
 
 class RegressorDF(DirectionalForecast):
     def __init__(self, *args, **kwargs):
