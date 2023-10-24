@@ -6,7 +6,7 @@ from sklearn import linear_model
 class HMMExogenousDC(ExogenousDC):
 
     def __init__(self, estimator, y_train, y_test, name):
-        ExogenousDC.__init__(self,estimator, y_train, y_test)
+        ExogenousDC.__init__(self,estimator, y_train, y_test, name)
         from hmmlearn import hmm
         self.name = name
         self.exogenous_model = hmm.GaussianHMM(n_components=3, covariance_type="diag", n_iter=100)

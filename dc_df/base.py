@@ -8,11 +8,12 @@ from sktime.forecasting.model_selection import SlidingWindowSplitter
 
 
 class DirectionalForecast():
-    def __init__(self, estimator, y_train, y_test):
+    def __init__(self, estimator, y_train, y_test, name):
         self.estimator = estimator
         self.y_train = y_train
         self.y_test = y_test
         self.X = None #for exogenous models
+        self.name = name
     def get_name(self):
         return self.name
     def fit_predict(self):
